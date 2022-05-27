@@ -3,6 +3,8 @@ import sys
 from collections import defaultdict
 import re
 
+# Written by Readman Chiu
+
 def get_secondary_alignments(aln):
     mappings = defaultdict(list)
     if aln.has_tag('SA'):
