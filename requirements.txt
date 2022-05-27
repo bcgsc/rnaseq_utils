@@ -4,4 +4,3 @@
 # conda install --file requirements.txt
 
 pysam
-python
