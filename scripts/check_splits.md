@@ -24,7 +24,7 @@ $ grep qq check_splits.txt | awk '$9>0' | cut -f2 -d' ' | uniq -c | sed 's/^[ ]*
 6000
 ```
 
-10,000 transcripts with 30,000 splits supported by >= 1 read pair support.
+30,000 splits within 10,000 contigs have >= 1 read pair support each.
 
-6,000 transcripts with 1 split pair that has >= 1 read pair support.
+6,000 contigs with only 1 split each, where each split has >= 1 read pair support.
 
