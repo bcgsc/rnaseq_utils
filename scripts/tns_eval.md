@@ -5,9 +5,11 @@ A Python script for evaluating transcriptome assembly quality.
 ### input files
 
 * PAF file of assembly alignments against the reference transcriptome (**not genome**)
-* text file of grouth truth transcript IDs (one ID per line)
-  * use `tns_get_tids.sh` to create this file
+* Text file of grouth truth transcript IDs
+  * One transcript ID per line
+  * To evaluate an assembly of Trans-NanoSim reads, use `tns_get_tids.sh` to create this file
 * GTF file of reference annotation
+  * Must contain attributes for `gene_id` and `transcript_id`
 * path prefix of output files
 * TSV file of Trans-NanoSim transcript expression levels (optional)
   * 3 columns: `target_id`, `est_counts`, `tpm`
