@@ -9,7 +9,7 @@ A Python script for evaluating transcriptome assembly quality.
 * GTF file of reference annotation
 * path prefix of output files
 * TSV file of Trans-NanoSim transcript expression levels (optional)
-** 3 columns: `target_id`, `est_counts`, `tpm`
+  * 3 columns: `target_id`, `est_counts`, `tpm`
 
 ### usage
 
