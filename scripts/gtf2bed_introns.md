@@ -1,4 +1,4 @@
-# get_introns.py
+# gtf2bed_introns.py
 
 A Python script to extract a 3-column BED file for introns from an input GTF.
 
@@ -9,8 +9,7 @@ A Python script to extract a 3-column BED file for introns from an input GTF.
 ## usage
 
 ```
-$ python get_introns.py --help
-usage: get_introns.py [-h] gtf
+usage: gtf2bed_introns.py [-h] gtf
 
 Extract a 3-column BED file for introns from an input GTF
 

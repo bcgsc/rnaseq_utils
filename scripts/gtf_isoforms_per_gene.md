@@ -1,4 +1,4 @@
-# count_isoforms.py
+# gtf_isoforms_per_gene.py
 
 A Python script for counting the number of isoforms for each gene in a GTF file.
 
@@ -9,7 +9,7 @@ A Python script for counting the number of isoforms for each gene in a GTF file.
 ### usage
 
 ```
-usage: count_isoforms.py [-h] [--summary] gtf
+usage: gtf_isoforms_per_gene.py [-h] [--summary] gtf
 
 Count the number isoforms for each gene in a GTF file
 
@@ -24,7 +24,7 @@ optional arguments:
 ### example usage
 
 ```
-$ python count_isoforms.py Homo_sapiens.GRCh38.103.gtf
+$ python gtf_isoforms_per_gene.py Homo_sapiens.GRCh38.103.gtf
 ENSG00000179818	239
 ENSG00000109339	192
 ENSG00000226674	189
@@ -39,7 +39,7 @@ ENSG00000224078	142
 ```
 
 ```
-$ python count_isoforms.py Homo_sapiens.GRCh38.103.gtf --summary
+$ python gtf_isoforms_per_gene.py Homo_sapiens.GRCh38.103.gtf --summary
 genes:   	60666
 isoforms:	234393
   mean:  	3.8636633369597466
