@@ -110,7 +110,7 @@ def extract_feature_lengths(gtf, summarize=False):
                     for _chrom, _start, _end, _strand, _gid in introns:
                         intron_lengths.append(_end - _start + 1)
                 else:
-                    print(prev_gid, FEATURE.GENE, str(max_gid_end - min_gid_start), sep='\t')
+                    print(prev_gid, FEATURE.GENE, str(max_gid_end - min_gid_start + 1), sep='\t')
                     for _chrom, _start, _end, _strand, _gid in sorted(exons):
                         print(_chrom + ':' + str(_start) + '-' + str(_end) + ':' + _strand, FEATURE.EXON, str(_end - _start + 1), sep='\t')
                     for _chrom, _start, _end, _strand, _gid in sorted(introns):
