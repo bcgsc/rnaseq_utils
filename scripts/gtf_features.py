@@ -187,6 +187,9 @@ def count_features_per_gene(gtf, summarize=False):
     transcripts = set()
     exon_chain = list()
     
+    if not summarize:
+        print('gene_name', 'feature', 'count_per_gene', sep='\t')
+    
     for chrom, start, end, strand, tid, gid in exon_generator(gtf):
         if tid != prev_tid:
             introns.update(extract_introns(exon_chain))
