@@ -1,4 +1,4 @@
-# gtf_feature_lengths
+# gtf_features.py
 
 A Python script for extracting feature information from a GTF file.
 
