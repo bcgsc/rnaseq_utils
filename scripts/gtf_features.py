@@ -306,6 +306,7 @@ parser_bed = subparsers.add_parser(MODE.BED,
     description=parser_bed_help, help=parser_bed_help)
 parser_bed.add_argument('gtf', help='path of input GTF file')
 parser_bed.add_argument('--feature', help='feature of interest',
+    required=True,
     choices=[FEATURE.EXON, FEATURE.INTRON, FEATURE.TRANSCRIPT, FEATURE.GENE])
 
 parser_count_help = "Count features per gene (i.e. exon, intron, transcript)"
