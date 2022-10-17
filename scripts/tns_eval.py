@@ -183,7 +183,10 @@ def process_batch(batch, txpt_recon_props, min_aln_len, truth_ids, gene_map, ful
                         alt_best_record = r
                         merged_length = m
             if alt_best_record:
-                return (qname, best_tname, alt_best_record[5], gene_map[r[5]] == best_gene)
+                alt_best_tname = alt_best_record[5]
+                return ('MISASSEMBLY', qname, best_tname, alt_best_tname, gene_map[alt_best_tname] == best_gene)
+        
+        return ('RECONSTRUCTION', qname, best_tname, trp)
         
     return None
         
@@ -263,45 +266,69 @@ logging.info('parsing PAF file...')
 prev_qname = None
 intragene_misassemblies = list()
 intergene_misassemblies = list()
+num_complete_contigs = 0
+num_partial_contigs = 0
 
-with gzopen(args.paf) as fh:
-    batch = list()
-    for line in fh:
-        cols = line.strip().split('\t')
-        
-        qname = cols[0]
-        tname = fix_name(cols[5])
-        cols[5] = tname
-        tlen = int(cols[6])
-        nmatch = int(cols[9])
-        blen = int(cols[10])
-        
-        txpt_lengths[tname] = tlen
+with open(args.outprefix + 'reconstruction.tsv', 'wt') as fw:
+    with gzopen(args.paf) as fh:
+        batch = list()
+        for line in fh:
+            cols = line.strip().split('\t')
+            
+            qname = cols[0]
+            tname = fix_name(cols[5])
+            cols[5] = tname
+            tlen = int(cols[6])
+            nmatch = int(cols[9])
+            blen = int(cols[10])
+            
+            txpt_lengths[tname] = tlen
 
-        
-        if prev_qname and prev_qname != qname and len(batch) > 0:
-            mis = process_batch(batch, txpt_recon_props, min_aln_len, truth_ids, gene_map, min_full_prop)
-            if mis:
-                if mis[-1]:
-                   intragene_misassemblies.append(mis)
+            
+            if prev_qname and prev_qname != qname and len(batch) > 0:
+                result = process_batch(batch, txpt_recon_props, min_aln_len, truth_ids, gene_map, min_full_prop)
+                if result:
+                    result_type = result[0]
+                    if result_type == 'MISASSEMBLY':
+                        if result[-1]:
+                           intragene_misassemblies.append(result[1:])
+                        else:
+                           intergene_misassemblies.append(result[1:])
+                    elif result_type == 'RECONSTRUCTION':
+                        rtype, cid, tid, reconstruction = result
+                        fw.write(cid + '\t' + tid + '\t' + str(reconstruction) + '\n')
+                        if reconstruction >= min_full_prop:
+                            num_complete_contigs += 1
+                        else:
+                            num_partial_contigs += 1
+                batch = list()
+                
+            if blen >= min_aln_len and \
+                float(nmatch)/blen >= min_aln_pid and \
+                get_max_indel(get_paf_cigar(cols)) <= max_aln_indel:
+                batch.append(cols)
+                
+            prev_qname = qname
+
+        # process the last read's alignments
+        result = process_batch(batch, txpt_recon_props, min_aln_len, truth_ids, gene_map, min_full_prop)
+        if result:
+            result_type = result[0]
+            if result_type == 'MISASSEMBLY':
+                if result[-1]:
+                   intragene_misassemblies.append(result[1:])
                 else:
-                   intergene_misassemblies.append(mis)
-            batch = list()
-            
-        if blen >= min_aln_len and \
-            float(nmatch)/blen >= min_aln_pid and \
-            get_max_indel(get_paf_cigar(cols)) <= max_aln_indel:
-            batch.append(cols)
-            
-        prev_qname = qname
+                   intergene_misassemblies.append(result[1:])
+            elif result_type == 'RECONSTRUCTION':
+                rtype, cid, tid, reconstruction = result
+                fw.write(cid + '\t' + tid + '\t' + str(reconstruction) + '\n')
+                if reconstruction >= min_full_prop:
+                    num_complete_contigs += 1
+                else:
+                    num_partial_contigs += 1
 
-    # process the last read's alignments
-    mis = process_batch(batch, txpt_recon_props, min_aln_len, truth_ids, gene_map, min_full_prop)
-    if mis:
-        if mis[-1]:
-           intragene_misassemblies.append(mis)
-        else:
-           intergene_misassemblies.append(mis)
+print("complete contigs:", num_complete_contigs, sep='\t')
+print("partial contigs:", num_partial_contigs, sep='\t')
 
 # tally results
 complete = list()
@@ -324,19 +351,19 @@ for fp in txpt_recon_props.keys() - truth_ids:
 
 # print results
 num_complete = len(complete)
-print("complete:", num_complete, sep='\t')
+print("complete transcripts:", num_complete, sep='\t')
 if tpm_bin_map:
     print(get_tpm_quartile_size(complete, tpm_bin_map))
 
-print("partial:", len(partial), sep='\t')
+print("partial transcripts:", len(partial), sep='\t')
 if tpm_bin_map:
     print(get_tpm_quartile_size(partial, tpm_bin_map))
     
-print("missing:", len(missing), sep='\t')
+print("missing transcripts:", len(missing), sep='\t')
 if tpm_bin_map:
     print(get_tpm_quartile_size(missing, tpm_bin_map))
 
-print("false pos.:", len(false_pos), sep='\t')
+print("false pos. transcripts:", len(false_pos), sep='\t')
 
 num_intragene_mis = len(intragene_misassemblies)
 num_intergene_mis = len(intergene_misassemblies)
@@ -367,5 +394,7 @@ with open(args.outprefix + 'intragene_misassemblies.tsv', 'wt') as fh:
 
 with open(args.outprefix + 'redundant.tsv', 'wt') as fh:
     for ref, names in assigned_txpts.items():
-        if len(names) > 1:
-            fh.write(ref + '\t' + ' '.join(names) + '\n')
+        num_names = len(names)
+        if num_names > 1:
+            fh.write(ref + '\t' + str(num_names) + '\t' + ' '.join(names) + '\n')
+
