@@ -193,6 +193,8 @@ def process_batch(batch, txpt_recon_props, min_aln_len, truth_ids, gene_map, ful
         
 
 parser = argparse.ArgumentParser(description='Evaluate transcriptome assembly quality')
+parser.add_argument('assembly',
+                    help='path of assembly FASTA file')
 parser.add_argument('paf',
                     help='path of input PAF file')
 parser.add_argument('truth',
@@ -234,7 +236,7 @@ tpm_quantiles = None
 if args.tpm:
     logging.info('parsing abundance file...')
     tpm_bin_map, tpm_quantiles = get_tpm_bin_map(args.tpm, truth_ids)
-    logging.info('TPM quantiles')
+    logging.info('TPM quantiles:')
     logging.info('min\tq1\tM\tq3\tmax')
     logging.info(str(tpm_quantiles[0]) +
         '\t' + str(tpm_quantiles[1]) +
@@ -327,8 +329,30 @@ with open(args.outprefix + 'reconstruction.tsv', 'wt') as fw:
                 else:
                     num_partial_contigs += 1
 
+# parse assembly FASTA
+logging.info('parsing assembly file...')
+assembly_cid_seq_dict = dict()
+with gzopen(args.assembly) as fh:
+    cid = None
+    seq = ''
+    for line in fh:
+        if line[0] == '>':
+            if cid:
+                # store previous seq
+                assembly_cid_seq_dict[cid] = seq
+            cid = line[1:].strip().split(' ', 1)[0]
+            seq = ''
+        else:
+            seq += line.strip()
+    if cid:
+        # store final seq
+        assembly_cid_seq_dict[cid] = seq
+num_contigs = len(assembly_cid_seq_dict)
+
+print("contigs", num_contigs, sep='\t')
 print("complete contigs", num_complete_contigs, sep='\t')
 print("partial contigs", num_partial_contigs, sep='\t')
+print("unclassified contigs", num_contigs - num_complete_contigs - num_partial_contigs, sep='\t')
 
 # tally results
 complete = list()
