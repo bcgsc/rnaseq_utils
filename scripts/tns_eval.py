@@ -144,26 +144,6 @@ def process_batch(batch, txpt_recon_props, min_aln_len, truth_ids, gene_map, ful
         best_tstart = int(best_record[7])
         best_tend = int(best_record[8])
         best_gene = gene_map[best_tname]
-
-        trp = float(best_tend - best_tstart)/best_tlen
-        assert trp <= 1.0
-        if best_tname not in txpt_recon_props:
-            txpt_recon_props[best_tname] = trp
-        else:
-            best_trp = txpt_recon_props[best_tname]
-            if trp > best_trp:
-                txpt_recon_props[best_tname] = trp
-            if trp >= full_prop and best_trp >= full_prop:
-                global num_redundant
-                num_redundant += 1
-        
-        if trp >= full_prop:
-            if best_tname in assigned_txpts:
-                cids = assigned_txpts[best_tname]
-            else:
-                cids = []
-                assigned_txpts[best_tname] = cids
-            cids.append(qname)
         
         if len(batch) > 1:
             # attempt to find misassembly
@@ -185,6 +165,27 @@ def process_batch(batch, txpt_recon_props, min_aln_len, truth_ids, gene_map, ful
             if alt_best_record:
                 alt_best_tname = alt_best_record[5]
                 return ('MISASSEMBLY', qname, best_tname, alt_best_tname, gene_map[alt_best_tname] == best_gene)
+        
+        # not a misassembly; calculate reconstruction
+        trp = float(best_tend - best_tstart)/best_tlen
+        assert trp <= 1.0
+        if best_tname not in txpt_recon_props:
+            txpt_recon_props[best_tname] = trp
+        else:
+            best_trp = txpt_recon_props[best_tname]
+            if trp > best_trp:
+                txpt_recon_props[best_tname] = trp
+            if trp >= full_prop and best_trp >= full_prop:
+                global num_redundant
+                num_redundant += 1
+        
+        if trp >= full_prop:
+            if best_tname in assigned_txpts:
+                cids = assigned_txpts[best_tname]
+            else:
+                cids = []
+                assigned_txpts[best_tname] = cids
+            cids.append(qname)
         
         return ('RECONSTRUCTION', qname, best_tname, trp)
         
@@ -270,6 +271,7 @@ intragene_misassemblies = list()
 intergene_misassemblies = list()
 num_complete_contigs = 0
 num_partial_contigs = 0
+num_misassembled_contigs = 0
 
 with open(args.outprefix + 'reconstruction.tsv', 'wt') as fw:
     with gzopen(args.paf) as fh:
@@ -296,6 +298,7 @@ with open(args.outprefix + 'reconstruction.tsv', 'wt') as fw:
                            intragene_misassemblies.append(result[1:])
                         else:
                            intergene_misassemblies.append(result[1:])
+                        num_misassembled_contigs += 1
                     elif result_type == 'RECONSTRUCTION':
                         rtype, cid, tid, reconstruction = result
                         fw.write(cid + '\t' + tid + '\t' + str(reconstruction) + '\n')
@@ -321,6 +324,7 @@ with open(args.outprefix + 'reconstruction.tsv', 'wt') as fw:
                    intragene_misassemblies.append(result[1:])
                 else:
                    intergene_misassemblies.append(result[1:])
+                num_misassembled_contigs += 1
             elif result_type == 'RECONSTRUCTION':
                 rtype, cid, tid, reconstruction = result
                 fw.write(cid + '\t' + tid + '\t' + str(reconstruction) + '\n')
@@ -352,7 +356,8 @@ num_contigs = len(assembly_cid_seq_dict)
 print("contigs", num_contigs, sep='\t')
 print("complete contigs", num_complete_contigs, sep='\t')
 print("partial contigs", num_partial_contigs, sep='\t')
-print("unclassified contigs", num_contigs - num_complete_contigs - num_partial_contigs, sep='\t')
+print("misassembled contigs", num_misassembled_contigs, sep='\t')
+print("unclassified contigs", num_contigs - num_complete_contigs - num_partial_contigs - num_misassembled_contigs, sep='\t')
 
 # tally results
 complete = list()
