@@ -2,8 +2,9 @@
 
 A Python script for evaluating transcriptome assembly quality.
 
-### input files
+### input arguments
 
+* FASTA file of assembly
 * PAF file of assembly alignments against the reference transcriptome (**not genome**)
 * Text file of grouth truth transcript IDs
   * One transcript ID per line
@@ -17,15 +18,15 @@ A Python script for evaluating transcriptome assembly quality.
 ### usage
 
 ```
-$ python tns_eval.py --help
-usage: tns_eval.py [-h] [--full_prop FLOAT] [--aln_pid FLOAT] [--aln_len INT] [--aln_indel INT] [--tpm TSV] paf truth gtf outprefix
+$ usage: tns_eval.py [-h] [--full_prop FLOAT] [--aln_pid FLOAT] [--aln_len INT] [--aln_indel INT] [--tpm TSV] assembly paf truth gtf outprefix
 
 Evaluate transcriptome assembly quality
 
 positional arguments:
+  assembly           path of assembly FASTA file
   paf                path of input PAF file
   truth              path of truth transcript IDs
-  gtf                path of gtf
+  gtf                path of GTF
   outprefix          path of output prefix
 
 optional arguments:
@@ -44,5 +45,5 @@ optional arguments:
 minimap2 -x map-ont -c -t 12 reference_transcripts.fasta assembly.fasta | gzip -c > aln.paf.gz
 
 # evaluate the assembly
-python tns_eval.py aln.paf.gz truth.txt annotation.gtf ./results_ --tpm transnanosim_quant.tsv > ./results_summary.txt
+python tns_eval.py assembly.fa aln.paf.gz truth.txt annotation.gtf ./results_ --tpm transnanosim_quant.tsv > ./results_summary.txt
 ```
