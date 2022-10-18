@@ -198,7 +198,7 @@ parser.add_argument('paf',
 parser.add_argument('truth',
                     help='path of truth transcript IDs')
 parser.add_argument('gtf',
-                    help='path of gtf')
+                    help='path of GTF')
 parser.add_argument('outprefix',
                     help='path of output prefix')
 parser.add_argument('--full_prop', dest='full_prop', default='0.95', metavar='FLOAT', type=float,
@@ -242,7 +242,7 @@ if args.tpm:
         '\t' + str(tpm_quantiles[3]) +
         '\t' + str(tpm_quantiles[4]))
 
-logging.info('parsing gtf file...')
+logging.info('parsing GTF file...')
 gene_map = get_gene_map(args.gtf)
 
 txpt_lengths = dict()
@@ -327,8 +327,8 @@ with open(args.outprefix + 'reconstruction.tsv', 'wt') as fw:
                 else:
                     num_partial_contigs += 1
 
-print("complete contigs:", num_complete_contigs, sep='\t')
-print("partial contigs:", num_partial_contigs, sep='\t')
+print("complete contigs", num_complete_contigs, sep='\t')
+print("partial contigs", num_partial_contigs, sep='\t')
 
 # tally results
 complete = list()
@@ -351,27 +351,36 @@ for fp in txpt_recon_props.keys() - truth_ids:
 
 # print results
 num_complete = len(complete)
-print("complete transcripts:", num_complete, sep='\t')
+print("complete transcripts", num_complete, sep='\t')
 if tpm_bin_map:
-    print(get_tpm_quartile_size(complete, tpm_bin_map))
+    q = 1
+    for val in get_tpm_quartile_size(complete, tpm_bin_map):
+        print("complete transcripts (Q" + str(q) +")", val, sep='\t')
+        q += 1
 
-print("partial transcripts:", len(partial), sep='\t')
+print("partial transcripts", len(partial), sep='\t')
 if tpm_bin_map:
-    print(get_tpm_quartile_size(partial, tpm_bin_map))
+    q = 1
+    for val in get_tpm_quartile_size(partial, tpm_bin_map):
+        print("partial transcripts (Q" + str(q) +")", val, sep='\t')
+        q += 1
     
-print("missing transcripts:", len(missing), sep='\t')
+print("missing transcripts", len(missing), sep='\t')
 if tpm_bin_map:
-    print(get_tpm_quartile_size(missing, tpm_bin_map))
+    q = 1
+    for val in get_tpm_quartile_size(missing, tpm_bin_map):
+        print("missing transcripts (Q" + str(q) +")", val, sep='\t')
+        q += 1
 
-print("false pos. transcripts:", len(false_pos), sep='\t')
+print("false pos. transcripts", len(false_pos), sep='\t')
 
 num_intragene_mis = len(intragene_misassemblies)
 num_intergene_mis = len(intergene_misassemblies)
 num_misassemblies = num_intragene_mis + num_intergene_mis
-print("intra-gene misassemblies:", num_intragene_mis, sep='\t')
-print("inter-gene misassemblies:", num_intergene_mis, sep='\t')
-print("misassemblies:", num_misassemblies, sep='\t')
-print("misassemblies / complete:", float(num_misassemblies)/num_complete, sep='\t')
+print("intra-gene misassemblies", num_intragene_mis, sep='\t')
+print("inter-gene misassemblies", num_intergene_mis, sep='\t')
+print("misassemblies", num_misassemblies, sep='\t')
+print("misassemblies / complete", float(num_misassemblies)/num_complete, sep='\t')
 
 # write results
 names = ['complete', 'partial', 'missing', 'false_pos']
@@ -388,6 +397,7 @@ for i in range(0, len(names)):
 with open(args.outprefix + 'intergene_misassemblies.tsv', 'wt') as fh:
     for m in intergene_misassemblies:
         fh.write('\t'.join(m[:-1]) + '\n')
+
 with open(args.outprefix + 'intragene_misassemblies.tsv', 'wt') as fh:
     for m in intragene_misassemblies:
         fh.write('\t'.join(m[:-1]) + '\n')
