@@ -272,6 +272,7 @@ intergene_misassemblies = list()
 num_complete_contigs = 0
 num_partial_contigs = 0
 num_misassembled_contigs = 0
+num_false_pos_contigs = 0
 
 with open(args.outprefix + 'reconstruction.tsv', 'wt') as fw:
     with gzopen(args.paf) as fh:
@@ -302,10 +303,13 @@ with open(args.outprefix + 'reconstruction.tsv', 'wt') as fw:
                     elif result_type == 'RECONSTRUCTION':
                         rtype, cid, tid, reconstruction = result
                         fw.write(cid + '\t' + tid + '\t' + str(reconstruction) + '\n')
-                        if reconstruction >= min_full_prop:
-                            num_complete_contigs += 1
+                        if tid in truth_ids:
+                            if reconstruction >= min_full_prop:
+                                num_complete_contigs += 1
+                            else:
+                                num_partial_contigs += 1
                         else:
-                            num_partial_contigs += 1
+                            num_false_pos_contigs += 1
                 batch = list()
                 
             if blen >= min_aln_len and \
@@ -328,10 +332,13 @@ with open(args.outprefix + 'reconstruction.tsv', 'wt') as fw:
             elif result_type == 'RECONSTRUCTION':
                 rtype, cid, tid, reconstruction = result
                 fw.write(cid + '\t' + tid + '\t' + str(reconstruction) + '\n')
-                if reconstruction >= min_full_prop:
-                    num_complete_contigs += 1
+                if tid in truth_ids:
+                    if reconstruction >= min_full_prop:
+                        num_complete_contigs += 1
+                    else:
+                        num_partial_contigs += 1
                 else:
-                    num_partial_contigs += 1
+                    num_false_pos_contigs += 1
 
 # parse assembly FASTA
 logging.info('parsing assembly file...')
@@ -357,7 +364,8 @@ print("contigs", num_contigs, sep='\t')
 print("complete contigs", num_complete_contigs, sep='\t')
 print("partial contigs", num_partial_contigs, sep='\t')
 print("misassembled contigs", num_misassembled_contigs, sep='\t')
-print("unclassified contigs", num_contigs - num_complete_contigs - num_partial_contigs - num_misassembled_contigs, sep='\t')
+print("false pos. contigs", num_false_pos_contigs, sep='\t')
+print("unclassified contigs", num_contigs - num_complete_contigs - num_partial_contigs - num_misassembled_contigs - num_false_pos_contigs, sep='\t')
 
 # tally results
 complete = list()
