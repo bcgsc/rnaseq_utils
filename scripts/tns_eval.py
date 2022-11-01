@@ -118,24 +118,41 @@ def get_max_indel(cigar):
             max_indel = max(max_indel, int(op))
     return max_indel
 
-def process_batch(batch, txpt_recon_props, min_aln_len, truth_ids, gene_map, full_prop):
+def process_batch(batch, txpt_recon_props, min_aln_len, min_aln_pid, max_aln_indel,
+                  truth_ids, gene_map, full_prop):
     # find the best record
     best_record = None
     best_nmatch = 0
+    has_skipped_record = False
     
     for cols in batch:
-        tname = cols[5]
-        cols[5] = tname
-        tlen = int(cols[6])
         nmatch = int(cols[9])
         blen = int(cols[10])
         
-        if nmatch > best_nmatch:
-            best_record = cols
-            best_nmatch = nmatch
-        elif nmatch == best_nmatch:
-            if tname in truth_ids and best_record[5] not in truth_ids:
+        if float(nmatch)/blen >= min_aln_pid and \
+                get_max_indel(get_paf_cigar(cols)) <= max_aln_indel:
+            tname = cols[5]
+            
+            if nmatch > best_nmatch:
                 best_record = cols
+                best_nmatch = nmatch
+            elif nmatch == best_nmatch:
+                if tname in truth_ids and best_record[5] not in truth_ids:
+                    best_record = cols
+        else:
+            has_skipped_record = True
+            
+    if has_skipped_record and not best_record:
+        for cols in batch:
+            tname = cols[5]
+            nmatch = int(cols[9])
+            
+            if nmatch > best_nmatch:
+                best_record = cols
+                best_nmatch = nmatch
+            elif nmatch == best_nmatch:
+                if tname in truth_ids and best_record[5] not in truth_ids:
+                    best_record = cols
     
     if best_record:
         qname = best_record[0]
@@ -165,6 +182,10 @@ def process_batch(batch, txpt_recon_props, min_aln_len, truth_ids, gene_map, ful
             if alt_best_record:
                 alt_best_tname = alt_best_record[5]
                 return ('MISASSEMBLY', qname, best_tname, alt_best_tname, gene_map[alt_best_tname] == best_gene)
+        
+        if get_max_indel(get_paf_cigar(best_record)) > max_aln_indel:
+            # indel too large
+            return ('MISASSEMBLY', qname, best_tname, best_tname, True)
         
         # not a misassembly; calculate reconstruction
         trp = float(best_tend - best_tstart)/best_tlen
@@ -206,9 +227,9 @@ parser.add_argument('outprefix',
                     help='path of output prefix')
 parser.add_argument('--full_prop', dest='full_prop', default='0.95', metavar='FLOAT', type=float,
                     help='minimum length proportion for full-length transcripts (default: %(default)s)')
-parser.add_argument('--aln_pid', dest='aln_pid', default='0.9', metavar='FLOAT', type=float,
+parser.add_argument('--aln_pid', dest='aln_pid', default='0.85', metavar='FLOAT', type=float,
                     help='minimum alignment percent identity (default: %(default)s)')
-parser.add_argument('--aln_len', dest='aln_len', default='150', metavar='INT', type=int,
+parser.add_argument('--aln_len', dest='aln_len', default='100', metavar='INT', type=int,
                     help='minimum alignment length (default: %(default)s)')
 parser.add_argument('--aln_indel', dest='aln_indel', default='70', metavar='INT', type=int,
                     help='maximum alignment indel (default: %(default)s)')
@@ -273,6 +294,8 @@ num_complete_contigs = 0
 num_partial_contigs = 0
 num_misassembled_contigs = 0
 num_false_pos_contigs = 0
+classified_contigs = set()
+unclassified_contigs = set()
 
 with open(args.outprefix + 'reconstruction.tsv', 'wt') as fw:
     with gzopen(args.paf) as fh:
@@ -291,16 +314,19 @@ with open(args.outprefix + 'reconstruction.tsv', 'wt') as fw:
 
             
             if prev_qname and prev_qname != qname and len(batch) > 0:
-                result = process_batch(batch, txpt_recon_props, min_aln_len, truth_ids, gene_map, min_full_prop)
+                result = process_batch(batch, txpt_recon_props, min_aln_len, min_aln_pid,
+                             max_aln_indel, truth_ids, gene_map, min_full_prop)
                 if result:
                     result_type = result[0]
                     if result_type == 'MISASSEMBLY':
+                        classified_contigs.add(prev_qname)
                         if result[-1]:
                            intragene_misassemblies.append(result[1:])
                         else:
                            intergene_misassemblies.append(result[1:])
                         num_misassembled_contigs += 1
                     elif result_type == 'RECONSTRUCTION':
+                        classified_contigs.add(prev_qname)
                         rtype, cid, tid, reconstruction = result
                         fw.write(cid + '\t' + tid + '\t' + str(reconstruction) + '\n')
                         if tid in truth_ids:
@@ -312,24 +338,25 @@ with open(args.outprefix + 'reconstruction.tsv', 'wt') as fw:
                             num_false_pos_contigs += 1
                 batch = list()
                 
-            if blen >= min_aln_len and \
-                float(nmatch)/blen >= min_aln_pid and \
-                get_max_indel(get_paf_cigar(cols)) <= max_aln_indel:
+            if blen >= min_aln_len:
                 batch.append(cols)
                 
             prev_qname = qname
 
         # process the last read's alignments
-        result = process_batch(batch, txpt_recon_props, min_aln_len, truth_ids, gene_map, min_full_prop)
+        result = process_batch(batch, txpt_recon_props, min_aln_len, min_aln_pid,
+                     max_aln_indel, truth_ids, gene_map, min_full_prop)
         if result:
             result_type = result[0]
             if result_type == 'MISASSEMBLY':
+                classified_contigs.add(prev_qname)
                 if result[-1]:
                    intragene_misassemblies.append(result[1:])
                 else:
                    intergene_misassemblies.append(result[1:])
                 num_misassembled_contigs += 1
             elif result_type == 'RECONSTRUCTION':
+                classified_contigs.add(prev_qname)
                 rtype, cid, tid, reconstruction = result
                 fw.write(cid + '\t' + tid + '\t' + str(reconstruction) + '\n')
                 if tid in truth_ids:
@@ -353,6 +380,8 @@ with gzopen(args.assembly) as fh:
                 assembly_cid_seq_dict[cid] = seq
             cid = line[1:].strip().split(' ', 1)[0]
             seq = ''
+            if cid not in classified_contigs:
+                unclassified_contigs.add(cid)
         else:
             seq += line.strip()
     if cid:
@@ -365,7 +394,14 @@ print("complete contigs", num_complete_contigs, sep='\t')
 print("partial contigs", num_partial_contigs, sep='\t')
 print("misassembled contigs", num_misassembled_contigs, sep='\t')
 print("false pos. contigs", num_false_pos_contigs, sep='\t')
-print("unclassified contigs", num_contigs - num_complete_contigs - num_partial_contigs - num_misassembled_contigs - num_false_pos_contigs, sep='\t')
+
+num_unclassified_contigs = num_contigs - num_complete_contigs - num_partial_contigs - num_misassembled_contigs - num_false_pos_contigs
+assert num_unclassified_contigs == len(unclassified_contigs)
+print("unclassified contigs", num_unclassified_contigs, sep='\t')
+
+with open(args.outprefix + 'unclassified_contigs.fa', 'wt') as fh:
+    for cid in sorted(unclassified_contigs):
+        fh.write('>' + cid + '\n' + assembly_cid_seq_dict[cid] + '\n')
 
 # tally results
 complete = list()
