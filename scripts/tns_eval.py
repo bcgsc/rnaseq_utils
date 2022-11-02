@@ -161,7 +161,7 @@ def process_batch(batch, txpt_recon_props, min_aln_len, min_aln_pid, max_aln_ind
         best_tstart = int(best_record[7])
         best_tend = int(best_record[8])
         best_gene = gene_map[best_tname]
-        best_pid = float(cols[9])/float(cols[10])
+        best_pid = float(best_record[9])/float(best_record[10])
         
         if len(batch) > 1:
             # attempt to find misassembly
