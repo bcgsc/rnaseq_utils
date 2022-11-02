@@ -161,6 +161,7 @@ def process_batch(batch, txpt_recon_props, min_aln_len, min_aln_pid, max_aln_ind
         best_tstart = int(best_record[7])
         best_tend = int(best_record[8])
         best_gene = gene_map[best_tname]
+        best_pid = float(cols[9])/float(cols[10])
         
         if len(batch) > 1:
             # attempt to find misassembly
@@ -208,7 +209,7 @@ def process_batch(batch, txpt_recon_props, min_aln_len, min_aln_pid, max_aln_ind
                 assigned_txpts[best_tname] = cids
             cids.append(qname)
         
-        return ('RECONSTRUCTION', qname, best_tname, trp)
+        return ('RECONSTRUCTION', qname, best_tname, trp, best_pid)
         
     return None
         
@@ -298,6 +299,7 @@ classified_contigs = set()
 unclassified_contigs = set()
 
 with open(args.outprefix + 'reconstruction.tsv', 'wt') as fw:
+    fw.write('contig_id\ttranscript_id\treconstruction\tpercent_identity\n')
     with gzopen(args.paf) as fh:
         batch = list()
         for line in fh:
@@ -327,8 +329,8 @@ with open(args.outprefix + 'reconstruction.tsv', 'wt') as fw:
                         num_misassembled_contigs += 1
                     elif result_type == 'RECONSTRUCTION':
                         classified_contigs.add(prev_qname)
-                        rtype, cid, tid, reconstruction = result
-                        fw.write(cid + '\t' + tid + '\t' + str(reconstruction) + '\n')
+                        rtype, cid, tid, reconstruction, pid = result
+                        fw.write(cid + '\t' + tid + '\t' + str(reconstruction) + '\t' + str(pid) + '\n')
                         if tid in truth_ids:
                             if reconstruction >= min_full_prop:
                                 num_complete_contigs += 1
@@ -357,8 +359,8 @@ with open(args.outprefix + 'reconstruction.tsv', 'wt') as fw:
                 num_misassembled_contigs += 1
             elif result_type == 'RECONSTRUCTION':
                 classified_contigs.add(prev_qname)
-                rtype, cid, tid, reconstruction = result
-                fw.write(cid + '\t' + tid + '\t' + str(reconstruction) + '\n')
+                rtype, cid, tid, reconstruction, pid = result
+                fw.write(cid + '\t' + tid + '\t' + str(reconstruction) + '\t' + str(pid) + '\n')
                 if tid in truth_ids:
                     if reconstruction >= min_full_prop:
                         num_complete_contigs += 1
@@ -464,18 +466,22 @@ for i in range(0, len(names)):
     l = lists[i]
     l.sort(key=lambda tup: tup[1], reverse=True)
     with open(args.outprefix + n + '.tsv', 'wt') as fh:
+        fh.write('transcript_id\tmax_reconstruction\n')
         for p in l:
             fh.write(p[0] + '\t' + str(p[1]) + '\n')
 
 with open(args.outprefix + 'intergene_misassemblies.tsv', 'wt') as fh:
+    fh.write('contig_id\ttranscript_id1\ttranscript_id2\n')
     for m in intergene_misassemblies:
         fh.write('\t'.join(m[:-1]) + '\n')
 
 with open(args.outprefix + 'intragene_misassemblies.tsv', 'wt') as fh:
+    fh.write('contig_id\ttranscript_id1\ttranscript_id2\n')
     for m in intragene_misassemblies:
         fh.write('\t'.join(m[:-1]) + '\n')
 
 with open(args.outprefix + 'redundant.tsv', 'wt') as fh:
+    fh.write('transcript_id\tnum_contigs\tcontig_ids\n')
     for ref, names in assigned_txpts.items():
         num_names = len(names)
         if num_names > 1:
