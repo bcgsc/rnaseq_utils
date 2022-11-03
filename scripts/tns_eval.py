@@ -118,7 +118,7 @@ def get_max_indel(cigar):
             max_indel = max(max_indel, int(op))
     return max_indel
 
-def process_batch(batch, txpt_recon_props, min_aln_len, min_aln_pid, max_aln_indel,
+def evaluate_batch(batch, txpt_recon_props, min_aln_len, min_aln_pid, max_aln_indel,
                   truth_ids, gene_map, full_prop):
     # find the best record
     best_record = None
@@ -185,10 +185,14 @@ def process_batch(batch, txpt_recon_props, min_aln_len, min_aln_pid, max_aln_ind
                 return ('MISASSEMBLY', qname, best_tname, alt_best_tname, gene_map[alt_best_tname] == best_gene)
         
         if get_max_indel(get_paf_cigar(best_record)) > max_aln_indel:
-            # indel too large
+            # indel too large; an intragenic misassembly
             return ('MISASSEMBLY', qname, best_tname, best_tname, True)
         
-        # not a misassembly; calculate reconstruction
+        if best_pid < min_aln_pid:
+            # percent identity too low
+            return ('LOWQUALITY', qname, best_tname, best_pid)
+        
+        # not a misassembly and not low quality; calculate reconstruction
         trp = float(best_tend - best_tstart)/best_tlen
         assert trp <= 1.0
         if best_tname not in txpt_recon_props:
@@ -228,7 +232,7 @@ parser.add_argument('outprefix',
                     help='path of output prefix')
 parser.add_argument('--full_prop', dest='full_prop', default='0.95', metavar='FLOAT', type=float,
                     help='minimum length proportion for full-length transcripts (default: %(default)s)')
-parser.add_argument('--aln_pid', dest='aln_pid', default='0.85', metavar='FLOAT', type=float,
+parser.add_argument('--aln_pid', dest='aln_pid', default='0.95', metavar='FLOAT', type=float,
                     help='minimum alignment percent identity (default: %(default)s)')
 parser.add_argument('--aln_len', dest='aln_len', default='100', metavar='INT', type=int,
                     help='minimum alignment length (default: %(default)s)')
@@ -288,65 +292,28 @@ logging.info('parsing PAF file...')
 12	int	Mapping quality (0-255; 255 for missing)
 """
 
-prev_qname = None
-intragene_misassemblies = list()
-intergene_misassemblies = list()
 num_complete_contigs = 0
 num_partial_contigs = 0
 num_misassembled_contigs = 0
 num_false_pos_contigs = 0
+num_low_qual_contigs = 0
 classified_contigs = set()
 unclassified_contigs = set()
+intragene_misassemblies = list()
+intergene_misassemblies = list()
 
-with open(args.outprefix + 'reconstruction.tsv', 'wt') as fw:
+prev_qname = None
+with gzopen(args.paf) as fh, \
+    open(args.outprefix + 'reconstruction.tsv', 'wt') as fw, \
+    open(args.outprefix + 'lowquality.tsv', 'wt') as fw2:
+    
     fw.write('contig_id\ttranscript_id\treconstruction\tpercent_identity\n')
-    with gzopen(args.paf) as fh:
-        batch = list()
-        for line in fh:
-            cols = line.strip().split('\t')
-            
-            qname = cols[0]
-            tname = fix_name(cols[5])
-            cols[5] = tname
-            tlen = int(cols[6])
-            nmatch = int(cols[9])
-            blen = int(cols[10])
-            
-            txpt_lengths[tname] = tlen
-
-            
-            if prev_qname and prev_qname != qname and len(batch) > 0:
-                result = process_batch(batch, txpt_recon_props, min_aln_len, min_aln_pid,
-                             max_aln_indel, truth_ids, gene_map, min_full_prop)
-                if result:
-                    result_type = result[0]
-                    if result_type == 'MISASSEMBLY':
-                        classified_contigs.add(prev_qname)
-                        if result[-1]:
-                           intragene_misassemblies.append(result[1:])
-                        else:
-                           intergene_misassemblies.append(result[1:])
-                        num_misassembled_contigs += 1
-                    elif result_type == 'RECONSTRUCTION':
-                        classified_contigs.add(prev_qname)
-                        rtype, cid, tid, reconstruction, pid = result
-                        fw.write(cid + '\t' + tid + '\t' + str(reconstruction) + '\t' + str(pid) + '\n')
-                        if tid in truth_ids:
-                            if reconstruction >= min_full_prop:
-                                num_complete_contigs += 1
-                            else:
-                                num_partial_contigs += 1
-                        else:
-                            num_false_pos_contigs += 1
-                batch = list()
-                
-            if blen >= min_aln_len:
-                batch.append(cols)
-                
-            prev_qname = qname
-
-        # process the last read's alignments
-        result = process_batch(batch, txpt_recon_props, min_aln_len, min_aln_pid,
+    fw2.write('contig_id\ttranscript_id\tpercent_identity\n')
+    
+    batch = list()
+    
+    def process_batch():
+        result = evaluate_batch(batch, txpt_recon_props, min_aln_len, min_aln_pid,
                      max_aln_indel, truth_ids, gene_map, min_full_prop)
         if result:
             result_type = result[0]
@@ -356,18 +323,56 @@ with open(args.outprefix + 'reconstruction.tsv', 'wt') as fw:
                    intragene_misassemblies.append(result[1:])
                 else:
                    intergene_misassemblies.append(result[1:])
+                global num_misassembled_contigs
                 num_misassembled_contigs += 1
             elif result_type == 'RECONSTRUCTION':
                 classified_contigs.add(prev_qname)
-                rtype, cid, tid, reconstruction, pid = result
+                cid, tid, reconstruction, pid = result[1:]
                 fw.write(cid + '\t' + tid + '\t' + str(reconstruction) + '\t' + str(pid) + '\n')
                 if tid in truth_ids:
+                    # not a false positive
                     if reconstruction >= min_full_prop:
+                        # a "complete" reconstruction
+                        global num_complete_contigs
                         num_complete_contigs += 1
                     else:
+                        # a "partial" reconstruction
+                        global num_partial_contigs
                         num_partial_contigs += 1
                 else:
+                    # a false positive
+                    global num_false_pos_contigs
                     num_false_pos_contigs += 1
+            elif result_type == 'LOWQUALITY':
+                classified_contigs.add(prev_qname)
+                cid, tid, pid = result[1:]
+                fw2.write(cid + '\t' + tid + '\t' + str(pid) + '\n')
+                global num_low_qual_contigs
+                num_low_qual_contigs += 1
+    
+    for line in fh:
+        cols = line.strip().split('\t')
+        
+        qname = cols[0]
+        tname = fix_name(cols[5])
+        cols[5] = tname
+        tlen = int(cols[6])
+        nmatch = int(cols[9])
+        blen = int(cols[10])
+        
+        txpt_lengths[tname] = tlen
+        
+        if prev_qname and prev_qname != qname and len(batch) > 0:
+            process_batch()
+            batch = list()
+            
+        if blen >= min_aln_len:
+            batch.append(cols)
+            
+        prev_qname = qname
+
+    # process the last read's alignments
+    process_batch()
 
 # parse assembly FASTA
 logging.info('parsing assembly file...')
@@ -396,8 +401,11 @@ print("complete contigs", num_complete_contigs, sep='\t')
 print("partial contigs", num_partial_contigs, sep='\t')
 print("misassembled contigs", num_misassembled_contigs, sep='\t')
 print("false pos. contigs", num_false_pos_contigs, sep='\t')
+print("low-quality contigs", num_low_qual_contigs, sep='\t')
 
-num_unclassified_contigs = num_contigs - num_complete_contigs - num_partial_contigs - num_misassembled_contigs - num_false_pos_contigs
+num_unclassified_contigs = num_contigs - num_complete_contigs \
+                           - num_partial_contigs - num_misassembled_contigs \
+                           - num_false_pos_contigs - num_low_qual_contigs
 assert num_unclassified_contigs == len(unclassified_contigs)
 print("unclassified contigs", num_unclassified_contigs, sep='\t')
 
