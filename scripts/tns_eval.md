@@ -32,8 +32,8 @@ positional arguments:
 optional arguments:
   -h, --help         show this help message and exit
   --full_prop FLOAT  minimum length proportion for full-length transcripts (default: 0.95)
-  --aln_pid FLOAT    minimum alignment percent identity (default: 0.9)
-  --aln_len INT      minimum alignment length (default: 150)
+  --aln_pid FLOAT    minimum alignment percent identity (default: 0.95)
+  --aln_len INT      minimum alignment length (default: 100)
   --aln_indel INT    maximum alignment indel (default: 70)
   --tpm TSV          path of transcript expression TSV
 ```
