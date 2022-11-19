@@ -184,9 +184,11 @@ def evaluate_batch(batch, txpt_recon_props, min_aln_len, min_aln_pid, max_aln_in
                 alt_best_tname = alt_best_record[5]
                 return ('MISASSEMBLY', qname, best_tname, alt_best_tname, gene_map[alt_best_tname] == best_gene)
         
-        if get_max_indel(get_paf_cigar(best_record)) > max_aln_indel:
-            # indel too large; an intragenic misassembly
-            return ('MISASSEMBLY', qname, best_tname, best_tname, True)
+        max_indel = get_max_indel(get_paf_cigar(best_record))
+        if max_indel > max_aln_indel:
+            # indel too large
+            #return ('MISASSEMBLY', qname, best_tname, best_tname, True)
+            return ('LARGEINDEL', qname, best_tname, max_indel)
         
         if best_pid < min_aln_pid:
             # percent identity too low
@@ -297,6 +299,7 @@ num_partial_contigs = 0
 num_misassembled_contigs = 0
 num_false_pos_contigs = 0
 num_low_qual_contigs = 0
+num_large_indel_contigs = 0
 classified_contigs = set()
 unclassified_contigs = set()
 intragene_misassemblies = list()
@@ -305,10 +308,12 @@ intergene_misassemblies = list()
 prev_qname = None
 with gzopen(args.paf) as fh, \
     open(args.outprefix + 'reconstruction.tsv', 'wt') as fw, \
-    open(args.outprefix + 'lowquality.tsv', 'wt') as fw2:
+    open(args.outprefix + 'lowquality.tsv', 'wt') as fw2, \
+    open(args.outprefix + 'largeindel.tsv', 'wt') as fw3:
     
     fw.write('contig_id\ttranscript_id\treconstruction\tpercent_identity\n')
     fw2.write('contig_id\ttranscript_id\tpercent_identity\n')
+    fw3.write('contig_id\ttranscript_id\tmax_indel\n')
     
     batch = list()
     
@@ -325,6 +330,12 @@ with gzopen(args.paf) as fh, \
                    intergene_misassemblies.append(result[1:])
                 global num_misassembled_contigs
                 num_misassembled_contigs += 1
+            elif result_type == 'LARGEINDEL':
+                classified_contigs.add(prev_qname)
+                cid, tid, maxindel = result[1:]
+                fw3.write(cid + '\t' + tid + '\t' + str(maxindel) + '\n')
+                global num_large_indel_contigs
+                num_large_indel_contigs += 1
             elif result_type == 'RECONSTRUCTION':
                 classified_contigs.add(prev_qname)
                 cid, tid, reconstruction, pid = result[1:]
@@ -396,16 +407,18 @@ with gzopen(args.assembly) as fh:
         assembly_cid_seq_dict[cid] = seq
 num_contigs = len(assembly_cid_seq_dict)
 
-print("contigs", num_contigs, sep='\t')
+print("total contigs", num_contigs, sep='\t')
 print("complete contigs", num_complete_contigs, sep='\t')
 print("partial contigs", num_partial_contigs, sep='\t')
 print("misassembled contigs", num_misassembled_contigs, sep='\t')
-print("false pos. contigs", num_false_pos_contigs, sep='\t')
+print("false-positive contigs", num_false_pos_contigs, sep='\t')
+print("large-indel contigs", num_large_indel_contigs, sep='\t')
 print("low-quality contigs", num_low_qual_contigs, sep='\t')
 
 num_unclassified_contigs = num_contigs - num_complete_contigs \
                            - num_partial_contigs - num_misassembled_contigs \
-                           - num_false_pos_contigs - num_low_qual_contigs
+                           - num_false_pos_contigs - num_low_qual_contigs \
+                           - num_large_indel_contigs
 assert num_unclassified_contigs == len(unclassified_contigs)
 print("unclassified contigs", num_unclassified_contigs, sep='\t')
 
@@ -455,15 +468,14 @@ if tpm_bin_map:
         print("missing transcripts (Q" + str(q) +")", val, sep='\t')
         q += 1
 
-print("false pos. transcripts", len(false_pos), sep='\t')
+print("false-positive transcripts", len(false_pos), sep='\t')
 
 num_intragene_mis = len(intragene_misassemblies)
 num_intergene_mis = len(intergene_misassemblies)
 num_misassemblies = num_intragene_mis + num_intergene_mis
 print("intra-gene misassemblies", num_intragene_mis, sep='\t')
 print("inter-gene misassemblies", num_intergene_mis, sep='\t')
-print("misassemblies", num_misassemblies, sep='\t')
-print("misassemblies / complete", float(num_misassemblies)/num_complete, sep='\t')
+print("total misassemblies", num_misassemblies, sep='\t')
 
 # write results
 names = ['complete', 'partial', 'missing', 'false_pos']
