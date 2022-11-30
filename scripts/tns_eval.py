@@ -129,8 +129,7 @@ def evaluate_batch(batch, txpt_recon_props, min_aln_len, min_aln_pid, max_aln_in
         nmatch = int(cols[9])
         blen = int(cols[10])
         
-        if float(nmatch)/blen >= min_aln_pid and \
-                get_max_indel(get_paf_cigar(cols)) <= max_aln_indel:
+        if get_max_indel(get_paf_cigar(cols)) <= max_aln_indel:
             tname = cols[5]
             
             if nmatch > best_nmatch:
@@ -141,7 +140,7 @@ def evaluate_batch(batch, txpt_recon_props, min_aln_len, min_aln_pid, max_aln_in
                     best_record = cols
         else:
             has_skipped_record = True
-            
+        
     if has_skipped_record and not best_record:
         for cols in batch:
             tname = cols[5]
