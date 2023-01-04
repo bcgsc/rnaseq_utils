@@ -9,4 +9,5 @@
 | gtf_filter.py             | filter GTF file by transcript IDs |
 | gtf_isoforms_per_gene.py  | count isoforms for each gene from GTF file |
 | tns_eval.py               | evaluate transcriptome assembly quality |
+| tns_gene_exp.py           | extract gene expression from Trans-NanoSim quantification file |
 | tns_get_tids.sh           | extract ground truth transcript IDs from Trans-NanoSim FASTQ file |
