@@ -275,6 +275,28 @@ if args.tpm:
 logging.info('parsing GTF file...')
 gene_map = get_gene_map(args.gtf)
 
+gene_transcript_count_map = dict()
+for tid, gid in gene_map.items():
+    if gid in gene_transcript_count_map:
+        gene_transcript_count_map[gid] += 1
+    else:
+        gene_transcript_count_map[gid] = 1
+
+# check whether gene ID is a multi-transcript gene
+def is_gid_mtg(gid):
+    global gene_transcript_count_map
+    num_txpt = gene_transcript_count_map[gid]
+    assert num_txpt > 0
+    return num_txpt > 1
+
+# check whether transcript ID is from a multi-transcript gene
+def is_tid_mtg(tid):
+    global gene_map, gene_transcript_count_map
+    gid = gene_map[tid]
+    num_txpt = gene_transcript_count_map[gid]
+    assert num_txpt > 0
+    return num_txpt > 1
+
 txpt_lengths = dict()
 txpt_recon_props = dict()
 logging.info('parsing PAF file...')
@@ -425,28 +447,64 @@ with open(args.outprefix + 'unclassified_contigs.fa', 'wt') as fh:
     for cid in sorted(unclassified_contigs):
         fh.write('>' + cid + '\n' + assembly_cid_seq_dict[cid] + '\n')
 
-# tally results
+# tally all results
 complete = list()
 partial = list()
 missing = list()
+
+# transcripts of single transcript genes
+complete_stg = list()
+partial_stg = list()
+missing_stg = list()
+
+# transcripts of multi-transcript genes
+complete_mtg = list()
+partial_mtg = list()
+missing_mtg = list()
+
 for t in truth_ids:
+    is_mtg = is_tid_mtg(t)
     if t in txpt_recon_props:
         p = txpt_recon_props[t]
         assert p <= 1.0
         if p >= min_full_prop:
             complete.append((t, p))
+            if is_mtg:
+                complete_mtg.append((t, p))
+            else:
+                complete_stg.append((t, p))
         else:
             partial.append((t, p))
+            if is_mtg:
+                partial_mtg.append((t, p))
+            else:
+                partial_stg.append((t, p))
     else:
         missing.append((t, 0))
+        if is_mtg:
+            missing_mtg.append((t, 0))
+        else:
+            missing_stg.append((t, 0))
 
 false_pos = list()
+false_pos_stg = list()
+false_pos_mtg = list()
 for fp in txpt_recon_props.keys() - truth_ids:
     false_pos.append((fp, txpt_recon_props[fp]))
+    if is_tid_mtg(fp):
+        false_pos_mtg.append((fp, txpt_recon_props[fp]))
+    else:
+        false_pos_stg.append((fp, txpt_recon_props[fp]))
+
+# check results
+assert len(complete) == len(complete_stg) + len(complete_mtg)
+assert len(partial) == len(partial_stg) + len(partial_mtg)
+assert len(missing) == len(missing_stg) + len(missing_mtg)
+assert len(false_pos) == len(false_pos_stg) + len(false_pos_mtg)
 
 # print results
-num_complete = len(complete)
-print("complete transcripts", num_complete, sep='\t')
+
+print("complete transcripts", len(complete), sep='\t')
 if tpm_bin_map:
     q = 1
     for val in get_tpm_quartile_size(complete, tpm_bin_map):
@@ -475,6 +533,84 @@ num_misassemblies = num_intragene_mis + num_intergene_mis
 print("intra-gene misassemblies", num_intragene_mis, sep='\t')
 print("inter-gene misassemblies", num_intergene_mis, sep='\t')
 print("total misassemblies", num_misassemblies, sep='\t')
+
+num_intergene_mis_stg = 0
+num_intergene_mis_mtg = 0
+for m in intergene_misassemblies:
+    tid1 = m[1]
+    tid2 = m[2]
+    if is_tid_mtg(tid1) or is_tid_mtg(tid2):
+        num_intergene_mis_mtg += 1
+    else:
+        num_intergene_mis_stg += 1
+        
+num_intragene_mis_stg = 0
+num_intragene_mis_mtg = 0
+for m in intragene_misassemblies:
+    tid1 = m[1]
+    tid2 = m[2]
+    if is_tid_mtg(tid1) or is_tid_mtg(tid2):
+        num_intragene_mis_mtg += 1
+    else:
+        num_intragene_mis_stg += 1
+
+# check results
+assert num_intragene_mis == num_intragene_mis_stg + num_intragene_mis_mtg
+assert num_intergene_mis == num_intergene_mis_stg + num_intergene_mis_mtg
+
+# transcripts from single-transcript genes
+print("STG complete transcripts", len(complete_stg), sep='\t')
+if tpm_bin_map:
+    q = 1
+    for val in get_tpm_quartile_size(complete_stg, tpm_bin_map):
+        print("STG complete transcripts (Q" + str(q) +")", val, sep='\t')
+        q += 1
+
+print("STG partial transcripts", len(partial_stg), sep='\t')
+if tpm_bin_map:
+    q = 1
+    for val in get_tpm_quartile_size(partial_stg, tpm_bin_map):
+        print("STG partial transcripts (Q" + str(q) +")", val, sep='\t')
+        q += 1
+    
+print("STG missing transcripts", len(missing_stg), sep='\t')
+if tpm_bin_map:
+    q = 1
+    for val in get_tpm_quartile_size(missing_stg, tpm_bin_map):
+        print("STG missing transcripts (Q" + str(q) +")", val, sep='\t')
+        q += 1
+
+print("STG false-positive transcripts", len(false_pos_stg), sep='\t')
+print("STG intra-gene misassemblies", num_intragene_mis_stg, sep='\t')
+print("STG inter-gene misassemblies", num_intergene_mis_stg, sep='\t')
+print("STG total misassemblies", num_intragene_mis_stg + num_intergene_mis_stg, sep='\t')
+
+# transcripts from multi-transcript genes
+print("MTG complete transcripts", len(complete_mtg), sep='\t')
+if tpm_bin_map:
+    q = 1
+    for val in get_tpm_quartile_size(complete_mtg, tpm_bin_map):
+        print("MTG complete transcripts (Q" + str(q) +")", val, sep='\t')
+        q += 1
+
+print("MTG partial transcripts", len(partial_mtg), sep='\t')
+if tpm_bin_map:
+    q = 1
+    for val in get_tpm_quartile_size(partial_mtg, tpm_bin_map):
+        print("MTG partial transcripts (Q" + str(q) +")", val, sep='\t')
+        q += 1
+    
+print("MTG missing transcripts", len(missing_mtg), sep='\t')
+if tpm_bin_map:
+    q = 1
+    for val in get_tpm_quartile_size(missing_mtg, tpm_bin_map):
+        print("MTG missing transcripts (Q" + str(q) +")", val, sep='\t')
+        q += 1
+
+print("MTG false-positive transcripts", len(false_pos_mtg), sep='\t')
+print("MTG intra-gene misassemblies", num_intragene_mis_mtg, sep='\t')
+print("MTG inter-gene misassemblies", num_intergene_mis_mtg, sep='\t')
+print("MTG total misassemblies", num_intragene_mis_mtg + num_intergene_mis_mtg, sep='\t')
 
 # write results
 names = ['complete', 'partial', 'missing', 'false_pos']
